@@ -1,19 +1,17 @@
 # 1_example_script
 
-# Load packages for analysis
-# you may need to install the packages first
-# to do this, run "install.packages("package_name"), then load it
-# for example, first run: install.packages("dplyr")
-# then run: library(dplyr)
-#library(dplyr)
 
-# to install "traitmatch" package, see:
-# https://github.com/ibartomeus/traitmatch
-# note that the syntax of the command:
-# install_github("traitmatch", "ibartomeus")
-# is deprecated. 
-# replace with :
-# install_github("ibartomeus/traitmatch")
+# Load libraries ----------------------------------------------------------
+
+library(dplyr)
+library(GenSA)
+library(remotes)
+# #SDMTools no longer on CRAN - must install archived version as below
+# install.packages("https://cran.r-project.org/src/contrib/Archive/SDMTools/SDMTools_1.1-221.2.tar.gz", repo=NULL, type="source")
+# library(SDMTools)
+# 
+# #install "traitmatch" package - https://github.com/ibartomeus/traitmatch - WILL NOT INSTALL UNLESS SDMTools is installed first
+# remotes::install_github("ibartomeus/traitmatch", dependencies = T)
 library(traitmatch)
 
 # load predict.niche.prob() function
@@ -25,14 +23,15 @@ source("functions/stability_fxns_Sauve.R")
 # load functions written for this manuscript
 source("functions/Example_functions.R")
 
-# load data
-#saveRDS(example_data, "data/example_data.RDS")
+# Load data ---------------------------------------------------------------
 example_data <- readRDS("data/example_data.RDS")
 
-# probability of interactions body size ####
+
+# Interaction probability - NICHE -----------------------------------------
 
 # make matrix with all possible pairwise combinations of taxa dryweights
-M <- expand.grid(example_data$community_data$log10.dw, example_data$community_data$log10.dw)
+M <- expand.grid(example_data$community_data$log10.dw,
+                 example_data$community_data$log10.dw)
 
 # estimate probability of interaction based on body sizes
 # this uses the traitmatch package, see Bartomeus et al. 2016 for more details. 
@@ -42,10 +41,14 @@ link.probs <- predict.niche.prob(pars = example_data$model_params,
                                  replicates = 1)[[1]]
 
 # this is a vector of all of the probabilities of pairwise interactions. We are going to convert this to a matrix. 
-prob.matr <- matrix(link.probs, sqrt(length(link.probs)), sqrt(length(link.probs)))
+prob.matr <- matrix(link.probs,
+                    nrow = sqrt(length(link.probs)),
+                    ncol = sqrt(length(link.probs)))
 
 
-# relative abundance matrix ####
+
+# Relative abundance - NEUTRAL EFFECTS ------------------------------------
+
 # See the "get_rel_ab()" function in "MS_functions.R" for more details
 rel.ab.matr <- get_rel_ab(vec = example_data$community_data$rel.ab,
                           taxa = example_data$community_data$taxa)
@@ -55,19 +58,26 @@ rel.ab.matr <- get_rel_ab(vec = example_data$community_data$rel.ab,
 # See the "scalexy()" function in "MS_functions.R" for more details
 rel.ab.matr <- scalexy(rel.ab.matr, min = 0.5, max = 1)
 
-# final probability matrices ####
+
+# Final probability matrices ----------------------------------------------
+
 # 1) prune niche forbidden links e.g. Pomeranz et al. 2019 Methods Eco Evo
-# 2) estimate link probability by multiplying niche probability (link.probs) and neutral probability (rel.ab.matr)
+# 2) estimate link probability by multiplying NICHE probability (link.probs) and NEUTRAL probability (rel.ab.matr)
 
 # 1) prune niche "forbidden" taxa based on morphology
 # e.g. "brushing/scraping" mouthparts, 
-taxa.forbid <- c("Acari", "Austrosimulium", "Coloburiscus", "Deleatidium", "Elmidae", "Helicopsyche", "Hydraenidae", "Nesameletus","Oligochaeta", "Olinga", "Oxyethira", "Potamopyrgus", "Spaniocerca", "Zelandobius")
+taxa.forbid <- c("Acari", "Austrosimulium", "Coloburiscus",
+                 "Deleatidium", "Elmidae", "Helicopsyche",
+                 "Hydraenidae","Nesameletus", "Oligochaeta",
+                 "Olinga", "Oxyethira", "Potamopyrgus",
+                 "Spaniocerca", "Zelandobius")
 
 # set column values to 0 for forbidden taxa
 # see rm_niche() function in MS_functions.R
-prob.matr.pruned <- rm_niche(prob.matr, taxa = taxa.forbid)
+prob.matr.pruned <- rm_niche(prob.matr,
+                             taxa = taxa.forbid)
 
-# 2) neutral effects
+# 2) NEUTRAL EFFECTS
 # "weighting" interaction probabilities based on relative abundances
 # e.g. more abundant pairs are more likely to interact
 prob.matr.neutral <- prob.matr.pruned * rel.ab.matr
@@ -77,18 +87,32 @@ prob.matr.final <- scalexy(prob.matr.neutral,
                              min = 0.01, 
                              max = 0.99)
 
-# Jacobian matrices and stability ####
-# these use the "get_measures()" function in the MS_functions.R script. 
 
-# this allows relies heavily on the stability functions of Sauve et al. 2016. If using, please cite the original publication: Sauve, A. M. C., Thébault, E., Pocock, M. J. O., & Fontaine, C. (2016). How plants connect pollination and herbivory networks and their contribution to community stability. Ecology, 97(4), 908-917. doi.org/10.1890/15-0132.1
+# Adjacency matrices ------------------------------------------------------
 
-# This example shows random interaction strengths 
+# The b_trial() function in Example_functions.R takes a square, probability matrix, and returns a binary, adjacency matrix based on those probabilities
+
+b_trial(prob.matr.final)
+
+# you can save these iterations as objects, and then get standard food web measures from them. 
+A1 <- b_trial(prob.matr.final)
+Get.web.stats(A1)
+
+# you can also estimate stability from them, shown below. 
+
+# Jacobian matrices and stability -----------------------------------------
+
+# the "get_measures()" function in the MS_functions.R script takes a probability matrix, and runs numerous "trials". For each trial, it returns the estimated stability metric "stab", as well as a number of standard food web measures. 
+
+# this analsis and functions relies heavily on the stability functions of Sauve et al. 2016. If using, please cite the original publication: Sauve, A. M. C., Thébault, E., Pocock, M. J. O., & Fontaine, C. (2016). How plants connect pollination and herbivory networks and their contribution to community stability. Ecology, 97(4), 908-917. doi.org/10.1890/15-0132.1
+
+# The example below is based on random interaction strengths 
 
 # the function allows you to "scale" interaction strengths based on relative body size
 # i.e. argument "scaled.Jij = TRUE"
 # It can also correlate positive and negative interaction strengths  
 # i.e. "correlate.Jij = TRUE"
-# default "correlate.value" = 0.7, i.e. positive interaction = 0.7 * negative interaction
+# default "correlate.value" = 0.7, i.e. positive interaction = 0.7 * negative interaction, but you can change this setting. 
 # You can also set both scaled and correlate to TRUE to examine effects of both
 
 # You can control the number of replications with the "trials" argument. 

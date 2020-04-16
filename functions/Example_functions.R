@@ -1,12 +1,11 @@
-# 6a_functions
+# Example functions 
 # jfpomeranz@gmail.com
 # June 2018
 
-# functions for for transforming probability matrices
-# to adjacency matrices, and calculating interaction strengths
+# These are useful functions for running the analyses presented in Pomeranz et al. 2020 Ecology
 
-# b_trial() = bernoulli trial
-# probability matrix to adjacency matrix
+# bernoulli trials
+# this function takes a square, probability matrix, and returns a binary adjacency matrix of the same dimensions
 b_trial <- function (prob_matr){
   sum.out = 0
   # make sure that all matrices have at least one link
@@ -22,40 +21,55 @@ b_trial <- function (prob_matr){
 }
 
 # function to calculate relative abundance matrices
+# this function takes a vector of abundance data and a character vector of taxa names. It returns a square matrix with the cross product of the relative abundances of taxa i,j. 
 get_rel_ab <- function(vec, taxa){
-  stopifnot(length(vec) == length(taxa))
-  rel.ab <- vec / sum(vec)
-  Nij <- matrix(0, length(vec), length(vec))
+  # make sure vectors are the same lenght
+  stopifnot(length(vec) == length(taxa)) 
+  # make a vector of relative abundances
+  rel.ab <- vec / sum(vec) 
+  # make an empty square matrix
+  Nij <- matrix(0,
+                length(vec),
+                length(vec))
+  # nested for loops to populate matrix i,j, with cross products of relative abundances of taxa i, and j, respectively.  
   for (i in 1:length(vec)){
     for (j in 1:length(vec)){
       Nij[i,j] <- rel.ab[i]*rel.ab[j]
     }
   }
+  # add row and columns names from taxa vector
   dimnames(Nij) <- list(taxa, taxa)
   Nij
 }
 
-# function to rescale variable x to [min, max]
-scalexy <- function(x, min, max){
+# function to scale continuous variable, x, to [min, max]
+scalexy <- function(x,
+                    min,
+                    max){
   ((max - min) / (max(x) - min(x))) *
     (x - min(x)) + min
 }
 
 # function to set probabilities of forbidden taxa to 0
-rm_niche <- function(matrix, taxa){
-  for(name in (colnames(matrix)[colnames(matrix) %in% taxa])){
+# matrix must have taxa for column names 
+# f.taxa is a character vector of taxa names
+rm_niche <- function(matrix,
+                     f.taxa){
+  for(name in 
+      (colnames(matrix)[colnames(matrix) %in% f.taxa])){
     matrix[,name] <- 0
   }
   matrix
 }
 
 # function to get fw_measures and dominant eigenvalue
-# requires functions from stability_fxns_sauve.R 
-get_measures <- function(matr,
-                         s2,
-                         trials = 1,
-                         scale.Jij = FALSE,
-                         correlate.Jij = FALSE,
+# requires functions from stability_fxns_sauve.R
+# returns the stability metric, as well as standard food web measures
+get_measures <- function(matr, # probability matrix
+                         s2, # initial value, see stability() function from Sauve
+                         trials = 1, # number of bernoulli trials to run
+                         scale.Jij = FALSE, # scale interactions based on body size?
+                         correlate.Jij = FALSE, # correlate positive and negative interactions?
                          correlate.value = 0.7){
   result <- list()
   for(i in 1:trials){
@@ -81,10 +95,15 @@ scale.Jij <- function(J){
   # J is a Jacobian matrix where elements Jij = interaction strength
   # e.g. object from jacobian_binary()
   element.rank <- rank(1:nrow(J)) / nrow(J)
-  scale.rank <- scalexy(element.rank, min = 0.25, max = 1.25)
-  scale.grid <- expand.grid(rev(scale.rank), scale.rank)
+  scale.rank <- scalexy(element.rank,
+                        min = 0.25,
+                        max = 1.25)
+  scale.grid <- expand.grid(rev(scale.rank),
+                            scale.rank)
   scale.vector <- scale.grid$Var1 * scale.grid$Var2
-  scale.matrix <- matrix(scale.vector, nrow = nrow(J), ncol = ncol(J))
+  scale.matrix <- matrix(scale.vector,
+                         nrow = nrow(J),
+                         ncol = ncol(J))
   scale.J <- scale.matrix * J
   return(scale.J)
 }
@@ -95,8 +114,10 @@ correlate.Jij <- function(J,
                           correlate.value = 0.7){
   # J is a JAcobian matrix where elements Jij = interaction strength
   # e.g. object from jacobian_binary()
-  negative.index <- which(J < 0, arr.ind = TRUE)
-  positive.index <- cbind(negative.index[,2], negative.index[,1])
+  negative.index <- which(J < 0,
+                          arr.ind = TRUE)
+  positive.index <- cbind(negative.index[,2],
+                          negative.index[,1])
   positive.strength <- abs(J[negative.index] * correlate.value)
     #runif(n = nrow(negative.index), min = 0.6, max = 0.8))
   # 0.7 comes from Montoya et al. 2009
