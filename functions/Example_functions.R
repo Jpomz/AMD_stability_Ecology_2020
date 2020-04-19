@@ -15,8 +15,10 @@ b_trial <- function (prob_matr){
                          prob = prob_matr),
                   ncol = ncol(prob_matr),
                   nrow = nrow(prob_matr))
-    sum.out = sum(out[upper.tri(out)])
+    sum.out = sum(out)
   }
+  # add dimnames from probability matrix
+  dimnames(out) <- dimnames(prob_matr)
   out
 }
 

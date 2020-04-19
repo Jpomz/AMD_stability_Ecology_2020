@@ -1,20 +1,12 @@
 # 1_example_script
 
+# this shows an example of how to predict interaction probabilities based on body size and relative abundance. 
+# This analysis utilizes adjacency matrix (A) structure to represent interactions. Matrices are ordered by increasing average body size from left to right and top to bottom. Columns represent species in their role as consumers, and rows represent their role as resources. 
+# i.e., Aij = 1 when column j consumes row i, and Aij = 0 if column j does not consumer row i. See methods in main text.
 
-# Load libraries ----------------------------------------------------------
+# Load functions ----------------------------------------------------------
 
-library(dplyr)
-library(GenSA)
-library(remotes)
-# #SDMTools no longer on CRAN - must install archived version as below
-# install.packages("https://cran.r-project.org/src/contrib/Archive/SDMTools/SDMTools_1.1-221.2.tar.gz", repo=NULL, type="source")
-# library(SDMTools)
-# 
-# #install "traitmatch" package - https://github.com/ibartomeus/traitmatch - WILL NOT INSTALL UNLESS SDMTools is installed first
-# remotes::install_github("ibartomeus/traitmatch", dependencies = T)
-library(traitmatch)
-
-# load predict.niche.prob() function
+# load predict.niche.prob() function from Bartomeus et al. 2016
 source("functions/predict.niche.prob.R")
 
 # stability functions from Sauve et al. 2016
@@ -26,15 +18,21 @@ source("functions/Example_functions.R")
 # Load data ---------------------------------------------------------------
 example_data <- readRDS("data/example_data.RDS")
 
+# make sure data is sorted by increasing body size
+example_data$community_data
+
 
 # Interaction probability - NICHE -----------------------------------------
 
-# make matrix with all possible pairwise combinations of taxa dryweights
+# make matrix with all possible pairwise combinations of log10 taxa dryweights
 M <- expand.grid(example_data$community_data$log10.dw,
                  example_data$community_data$log10.dw)
 
 # estimate probability of interaction based on body sizes
-# this uses the traitmatch package, see Bartomeus et al. 2016 for more details. 
+# This function solves equation 5 from Bartomeus et al. 2016, and predicts the probabiility of an interaction between two new species based on their body sizes
+# if using, please cite Bartomeus et al. 2016
+# the "model_params" are from a model parameterized using the traitmatch package. 
+# The model was parameterized using individual feeding data from Broadstone Stream and Tadnoll Brook (Woodward et al. 2010). Data was provided by Guy Woodward and Iwan Jones (personal communication, contact these authors for access to data)
 link.probs <- predict.niche.prob(pars = example_data$model_params,
                                  M[[1]],
                                  M[[2]],
@@ -45,18 +43,30 @@ prob.matr <- matrix(link.probs,
                     nrow = sqrt(length(link.probs)),
                     ncol = sqrt(length(link.probs)))
 
+# add taxa names to matrix rows and columns 
+# this is necessary for pruning niche forbidden links below
+dimnames(prob.matr) <- list(example_data$community_data$taxa,
+                            example_data$community_data$taxa)
+# print out sample of matrix
+prob.matr[1:5, 1:5]
 
 
 # Relative abundance - NEUTRAL EFFECTS ------------------------------------
 
+# Now we are going to make a matrix of relative abundances N, where Nij = Relative abundance of species i times relative abundance of species j 
 # See the "get_rel_ab()" function in "MS_functions.R" for more details
 rel.ab.matr <- get_rel_ab(vec = example_data$community_data$rel.ab,
                           taxa = example_data$community_data$taxa)
 
+# sample of relative abundance matrix
+rel.ab.matr[1:5, 1:5]
 
 # rescale the relative abundances in this matrix to be from 0.5 to 1
+# this means that the most abundant species pair are likely to interact, while the rarest pairs are less likely to interact. 
 # See the "scalexy()" function in "MS_functions.R" for more details
 rel.ab.matr <- scalexy(rel.ab.matr, min = 0.5, max = 1)
+# sample of rescaled relative abundance matrix
+rel.ab.matr[1:5, 1:5]
 
 
 # Final probability matrices ----------------------------------------------
@@ -65,28 +75,37 @@ rel.ab.matr <- scalexy(rel.ab.matr, min = 0.5, max = 1)
 # 2) estimate link probability by multiplying NICHE probability (link.probs) and NEUTRAL probability (rel.ab.matr)
 
 # 1) prune niche "forbidden" taxa based on morphology
-# e.g. "brushing/scraping" mouthparts, 
+# e.g. "brushing/scraping" mouthparts 
 taxa.forbid <- c("Acari", "Austrosimulium", "Coloburiscus",
                  "Deleatidium", "Elmidae", "Helicopsyche",
                  "Hydraenidae","Nesameletus", "Oligochaeta",
                  "Olinga", "Oxyethira", "Potamopyrgus",
                  "Spaniocerca", "Zelandobius")
 
-# set column values to 0 for forbidden taxa
+# set column values to 0 for forbidden taxa (i.e. these taxa are non-predatory, so set their consumer roles to 0)
 # see rm_niche() function in MS_functions.R
+# make sure your probability matrix has taxa in column names, otherwise it won't do wnything. 
 prob.matr.pruned <- rm_niche(prob.matr,
-                             taxa = taxa.forbid)
+                             f.taxa = taxa.forbid)
+
+# Pruned matrix, note that some columns are all 0's now
+prob.matr.pruned[1:5, 1:5]
 
 # 2) NEUTRAL EFFECTS
 # "weighting" interaction probabilities based on relative abundances
 # e.g. more abundant pairs are more likely to interact
 prob.matr.neutral <- prob.matr.pruned * rel.ab.matr
 
+# print out sample of 
+prob.matr.neutral[1:5, 1:5]
+
 # rescale probabilities to be between 0.01 and 0.99
 prob.matr.final <- scalexy(prob.matr.neutral,
                              min = 0.01, 
                              max = 0.99)
 
+# final probability matrix
+prob.matr.final[1:5, 1:5]
 
 # Adjacency matrices ------------------------------------------------------
 
@@ -133,3 +152,13 @@ random.J
 # B = number of basal taxa (i.e., prey, not predators)
 # I = number of intermediate taxa (i.e., both prey and predators)
 # T = number of top taxa (i.e., predators, but not prey)
+
+# references
+
+# Bartomeus I., Gravel D., Tylianakis J.M., Aizen M.A., Dickie I.A. & Bernard-Verdier M. (2016). A common framework for identifying linkage rules across different types of interactions. Functional Ecology 30, 1894-1903. https://doi.org/10.1111/1365-2435.12666
+
+# Pomeranz J.P.F., Thompson R.M., Poisot T. & Harding J.S. (2019). Inferring predator-prey interactions in food webs. Methods in Ecology and Evolution 10, 356-367. https://doi.org/10.1111/2041-210X.13125
+
+# Sauve A.M.C., Thébault E., Pocock M.J.O. & Fontaine C. (2016). How plants connect pollination and herbivory networks and their contribution to community stability. Ecology 97, 908-917 doi.org/10.1890/15-0132.1
+
+# Woodward G., Blanchard J.L., Lauridsen R.B., Edwards F.K., Jones J.I., Figueroa D.H., et al. (2010). Individual-Based Food Webs.: Species Identity , Body Size and Sampling Effects Individual-Based Food Webs.: Species Identity , Body Size and Sampling Effects. Advances In Ecological Research 43, 211-266. https://doi.org/10.1016/B978-0-12-385005-8.00006-X
